@@ -2,9 +2,33 @@ package sign
 
 import (
 	"fmt"
+	"github.com/robertkrimen/otto"
 	"log"
 	"testing"
 )
+
+
+func BenchmarkGo(b *testing.B) {
+	vm := otto.New()
+	vm.Run(`
+		console.log(-111111 >>> 64);
+		-111111 >>> 64;
+		-111111 >>> 64;
+		-111111 >>> 64;
+		-111111 >>> 64;
+		-111111 >>> 64;
+	`)
+}
+
+func BenchmarkOtto(b *testing.B) {
+	fmt.Println(jsPositiveRight(-111111, 0))
+	jsPositiveRight(-111111, 64)
+	jsPositiveRight(-111111, 64)
+	jsPositiveRight(-111111, 64)
+	jsPositiveRight(-111111, 64)
+	jsPositiveRight(-111111, 64)
+	jsPositiveRight(-111111, 64)
+}
 
 func TestUtf8StringToBytes(t *testing.T) {
 	fmt.Println(Utf8StringToBytes("cjxh"))

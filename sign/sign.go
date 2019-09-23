@@ -106,7 +106,7 @@ func BinBytesToString(e []byte) string {
 
 // js << 操作
 func jsLeft(a, i int) int {
-	r := jsint32(jsBInt32(a) << uint(i))
+	r := jsint32(jsBInt32(a) << uint(i) % 32)
 	if r >= 1 << 31 {
 		return r - 1 << 32
 	} else {
@@ -116,13 +116,13 @@ func jsLeft(a, i int) int {
 
 // js >>> 操作
 func jsPositiveRight(a, i int) int {
-	r := jsint32(jsBInt32(a) >> uint(i))
+	r := jsint32(jsBInt32(a) >> uint(i) % 32)
 	return r
 }
 
 // js >> 操作
 func jsRight(a, i int) int {
-	r := jsint32(jsBInt32(a) >> uint(i))
+	r := jsint32(jsBInt32(a) >> uint(i) % 32)
 	if r >= 1 << 31 {
 		return r - 1 << 32
 	} else {
@@ -188,6 +188,10 @@ func arrayIndex(s []int, i int) int {
 		return s[i]
 	}
 }
+
+//  https://m.poizon.com/mdu/product/recommendList.html?recommendId=252
+//  相关js: https://m.poizon.com/mdu/static/js/recommendList.c523b9762eeaa14d2b74.js
+//  见sign.js文件  从9160行开始
 
 func GetSign(e string) string  {
 	ee := Utf8StringToBytes(e)
