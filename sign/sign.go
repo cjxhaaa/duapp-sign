@@ -106,7 +106,7 @@ func BinBytesToString(e []byte) string {
 
 // js << 操作
 func jsLeft(a, i int) int {
-	r := jsint32(jsBInt32(a) << uint(i) % 32)
+	r := jsint32(jsBInt32(a) << (uint(i) % 32))
 	if r >= 1 << 31 {
 		return r - 1 << 32
 	} else {
@@ -116,13 +116,13 @@ func jsLeft(a, i int) int {
 
 // js >>> 操作
 func jsPositiveRight(a, i int) int {
-	r := jsint32(jsBInt32(a) >> uint(i) % 32)
+	r := jsint32(jsBInt32(a) >> (uint(i) % 32))
 	return r
 }
 
 // js >> 操作
 func jsRight(a, i int) int {
-	r := jsint32(jsBInt32(a) >> uint(i) % 32)
+	r := jsint32(jsBInt32(a) >> (uint(i) % 32))
 	if r >= 1 << 31 {
 		return r - 1 << 32
 	} else {
