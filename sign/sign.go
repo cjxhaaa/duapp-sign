@@ -1,17 +1,83 @@
 package sign
 
 import (
-	"errors"
 	"fmt"
+	"github.com/robertkrimen/otto"
 	"log"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 )
 
-func GetSignString(params map[string]string) string {
+var SignTool Signer
+
+func init() {
+	SignTool = NewSigner()
+}
+
+type Signer interface {
+	GetSignString(params map[string]string) string
+	GetSign(e string) string
+}
+
+
+
+type signer struct {
+	vm   *otto.Otto
+	mux  sync.Mutex
+}
+
+func NewSigner() *signer {
+	vm := otto.New()
+	vm.Run(`
+function o(e, t) {
+            var n, i, o, a, r;
+            return o = 2147483648 & e,
+            a = 2147483648 & t,
+            n = 1073741824 & e,
+            i = 1073741824 & t,
+            r = (1073741823 & e) + (1073741823 & t),
+            n & i ? 2147483648 ^ r ^ o ^ a : n | i ? 1073741824 & r ? 3221225472 ^ r ^ o ^ a : 1073741824 ^ r ^ o ^ a : r ^ o ^ a
+        }
+
+function g(e) {
+            var t, n, i = "", o = "";
+            for (n = 0; n <= 3; n++)
+                t = e >>> 8 * n & 255,
+                o = "0" + t.toString(16),
+                i += o.substr(o.length - 2, 2);
+            return i
+        }
+
+function a(e, t, n) {
+	return e & t | ~e & n
+}
+
+function r(e, t, n) {
+	return e & n | t & ~n
+}
+
+function i(e, t) {
+	return e << t | e >>> 32 - t
+}
+
+function c(e, t, n) {
+	return e ^ t ^ n
+}
+
+function l(e, t, n) {
+	return t ^ (e | ~n)
+}
+`)
+	return &signer{
+		vm: vm,
+	}
+}
+
+
+func (s *signer)GetSignString(params map[string]string) string {
 	signString := ""
 
 	keys := make([]string, 0, len(params))
@@ -24,84 +90,6 @@ func GetSignString(params map[string]string) string {
 	}
 	signString += "048a9c4943398714b356a696503d2d36"
 	return signString
-}
-
-
-func Rotl(e, n int) int {
-	return jsLeft(e, n)| jsRight(e, 32 - n)
-}
-
-func Endian(e interface{}) interface{} {
-	if ee, ok := e.(int); ok {
-		return 16711935 & Rotl(ee, 8) | 4278255360 & Rotl(ee, 24)
-	}
-	if ee, ok := e.([]int); ok {
-		for n := 0; n < len(ee); n++ {
-			if eee, ok := Endian(ee[n]).(int); ok {
-				ee[n] = eee
-			} else {
-				panic(errors.New("err Endian"))
-			}
-
-		}
-		return ee
-	}
-	return nil
-}
-
-func BytesToWords(e []byte) []int {
-	n := []int{}
-	for i := 0; i < len(e); i++ {
-		n = append(n, 0)
-	}
-	var r int = 0
-	for t := 0; t < len(e); t++ {
-		n[jsPositiveRight(r, 5)] |= (jsLeft(int(e[t]), 24 - r % 32) )
-
-		r += 8
-	}
-	return n
-}
-
-func BytesToHex(e []byte) string {
-	n := []string{}
-
-	for t := 0; t < len(e); t++ {
-		s1 := fmt.Sprintf("%x", jsRight(int(e[t]), 4))
-		n = append(n,  string(s1[len(s1)-1]))
-		s2 := fmt.Sprintf("%x", 15 & e[t])
-		n = append(n, string(s2[len(s2)-1]))
-	}
-	return strings.Join(n, "")
-}
-
-func WordsToBytes(e []int) []byte {
-	n := []uint8{}
-
-	for t := 0; t < 32 * len(e); t+=8 {
-		n = append(n, uint8(jsRight(e[jsRight(t, 5)], 24 - t % 32 & 255)))
-	}
-	return n
-}
-
-func Utf8StringToBytes(e string) []byte {
-	ee, err := url.PathUnescape(url.PathEscape(e))
-	if err != nil {
-		panic(err)
-	}
-	return BinStringToBytes(ee)
-}
-
-func BinStringToBytes(e string) []byte {
-	n := []byte{}
-	for t := 0; t < len(e); t++ {
-		n = append(n, 255 & uint8(e[t]))
-	}
-	return n
-}
-
-func BinBytesToString(e []byte) string {
-	return string(e)
 }
 
 // js << 操作
@@ -155,32 +143,6 @@ func jsBInt32(n int) int {
 	return int(i)
 }
 
-func aa(s, i, n int) int {
-	return (jsLeft(s, i) | jsPositiveRight(s, 32-i))+ n
-
-}
-
-func ff(e, n, t, r, o, i, a int) int {
-	s := e + (n & t | ^n & r) + jsPositiveRight(o, 0) + a
-	//fmt.Println("o:", o, "s: ", s)
-	return aa(s, i, n)
-}
-
-func gg(e, n, t, r, o, i, a int) int {
-	s := e + (n & r | t & ^r) + jsPositiveRight(o, 0) + a
-	return aa(s, i, n)
-}
-
-func hh(e, n, t, r, o, i, a int) int {
-	s := e + (n ^ t ^ r) + jsPositiveRight(o, 0) + a
-	return aa(s, i, n)
-}
-
-func ii(e, n, t, r, o, i, a int) int {
-	s := e + (t ^ (n | ^r)) + jsPositiveRight(o, 0) + a
-	return aa(s, i, n)
-}
-
 func arrayIndex(s []int, i int) int {
 	if i >= len(s) {
 		return 0
@@ -189,115 +151,236 @@ func arrayIndex(s []int, i int) int {
 	}
 }
 
-//  https://m.poizon.com/mdu/product/recommendList.html?recommendId=252
-//  相关js: https://m.poizon.com/mdu/static/js/recommendList.c523b9762eeaa14d2b74.js
-//  见sign.js文件  从9160行开始
 
-func GetSign(e string) string  {
-	ee := Utf8StringToBytes(e)
-	s := BytesToWords(ee)
-	c := 8 * len(ee)
-	l := 1732584193
-	d := -271733879
-	u := -1732584194
-	p := 271733878
+func (sg *signer)oo(e, t int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	o, _ := sg.vm.Call("o", nil, e, t)
+	result, _ := o.ToInteger()
+	return int(result)
+}
 
-	for k := 0; k < len(s); k ++ {
-		s[k] = 16711935 & (jsLeft(s[k], 8) | jsPositiveRight(s[k], 24)) | 4278255360 & (jsLeft(s[k], 24) | jsPositiveRight(s[k], 8))
+func (s *signer)bb(e string) string {
+	ee := []rune(strings.Replace(e, "\x0d\x0a", "\n", -1))
+	t := ""
+	for n := 0; n< len(e); n++ {
+		i := ee[n]
+		if i < 128 {
+			t += string(i)
+		} else {
+			if i > 127 && i < 2048 {
+				t += string(jsRight(int(i), 12) | 224)
+				t += string(63 & int(i) | 128)
+			} else {
+				t += string(jsRight(int(i), 12) | 224)
+				t += string(jsRight(int(i), 6) & 63 | 128)
+				t += string(63 & int(i) | 128)
+			}
+		}
 	}
+	return t
+}
 
-	s[jsPositiveRight(c,5)] |= jsLeft(128, c % 32)
+func (sg *signer)ggg(e int) string {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	g, _ := sg.vm.Call("g", nil, e)
+	result, _ := g.ToString()
+	return result
+}
 
-	s[14 + jsLeft(jsPositiveRight(c + 64, 9), 4)] = c
+func (sg *signer)aaa(e, t, n int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	a, _ := sg.vm.Call("a", nil, e, t, n)
+	result, _ := a.ToInteger()
+	return int(result)
+}
+
+func (sg *signer)rrr(e, t, n int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	r, _ := sg.vm.Call("r", nil, e, t, n)
+	result, _ := r.ToInteger()
+	return int(result)
+}
+
+func (sg *signer)iii(e, t int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	i, _ := sg.vm.Call("i", nil, e, t)
+	result, _ := i.ToInteger()
+	return int(result)
+}
+
+func (sg *signer)ccc(e, t, n int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	c, _ := sg.vm.Call("c", nil, e, t, n)
+	result, _ := c.ToInteger()
+	return int(result)
+}
+
+func (sg *signer)lll(e, t, n int) int {
+	sg.mux.Lock()
+	defer sg.mux.Unlock()
+	l, _ := sg.vm.Call("l", nil, e, t, n)
+	result, _ := l.ToInteger()
+	return int(result)
+	return t ^ (e | ^n)
+}
+
+func (ss *signer)ss(e, t, n, r, c, l, s int) int {
+	e = ss.oo(e, ss.oo(ss.oo(ss.aaa(t, n, r), c), s))
+	return ss.oo(ss.iii(e, l), t)
+}
+
+func (ss *signer)dd(e, t, n, a, c, l, s int) int {
+	e = ss.oo(e, ss.oo(ss.oo(ss.rrr(t, n, a), c), s))
+	return ss.oo(ss.iii(e, l), t)
+}
+
+func (ss *signer)uu(e, t, n, a, r, l, s int) int {
+	e = ss.oo(e, ss.oo(ss.oo(ss.ccc(t, n, a), r), s))
+	return ss.oo(ss.iii(e, l), t)
+}
+
+func (ss *signer)ii(e, t, n, a, r, c, s int) int {
+	e = ss.oo(e, ss.oo(ss.oo(ss.lll(t, n, a), r), s))
+	return ss.oo(ss.iii(e, c), t)
+}
+
+
+
+func pp(e string) []int {
+	var (
+		t int
+		ee = []rune(e)
+		n = len(e)
+		i = n + 8
+		o = (i - i % 64) / 64
+		a = 16 * (o + 1)
+		r = make([]int, a)
+		c = 0
+		l = 0
+	)
+	for l < n {
+		t = (l - l % 4) / 4
+		c = l % 4 * 8
+		r[t] = r[t] | jsLeft(int(ee[l]), c)
+		l++
+	}
+	t = (l - l % 4) /4
+	c = l % 4 * 8
+	r[t] = r[t] | jsLeft(128, c)
+	r[a-2] = jsLeft(n, 3)
+	r[a-1] = jsPositiveRight(n, 29)
+	return r
+}
+
+
+func (sg *signer)GetSign(e string) string  {
+	ee := sg.bb(e)
+	s := pp(ee)
 
 	var (
 		A, b, y, x int
+		l = 1732584193
+		d = 4023233417
+		u = 2562383102
+		p = 271733878
+		i = 7
+		j = 12
+		k = 17
+		m = 22
+		E = 5
+		f = 9
+		g = 14
+		o = 20
+		I = 4
+		J = 11
+		K = 16
+		L = 23
+		O = 6
+		P = 10
+		Q = 15
+		R = 21
 	)
-
 	for h := 0; h < countLen(s); h+=16 {
 		A = l
 		b = d
 		y = u
 		x = p
-
-		l = ff(l, d, u, p, arrayIndex(s, h + 0), 7, -680876936)
-		p = ff(p, l, d, u, arrayIndex(s, h + 1), 12, -389564586)
-		u = ff(u, p, l, d, arrayIndex(s, h + 2), 17, 606105819)
-		d = ff(d, u, p, l, arrayIndex(s, h + 3), 22, -1044525330)
-		l = ff(l, d, u, p, arrayIndex(s, h + 4), 7, -176418897)
-		p = ff(p, l, d, u, arrayIndex(s, h + 5), 12, 1200080426)
-		u = ff(u, p, l, d, arrayIndex(s, h + 6), 17, -1473231341)
-		d = ff(d, u, p, l, arrayIndex(s, h + 7), 22, -45705983)
-		l = ff(l, d, u, p, arrayIndex(s, h + 8), 7, 1770035416)
-		p = ff(p, l, d, u, arrayIndex(s, h + 9), 12, -1958414417)
-		u = ff(u, p, l, d, arrayIndex(s, h + 10), 17, -42063)
-		d = ff(d, u, p, l, arrayIndex(s, h + 11), 22, -1990404162)
-		l = ff(l, d, u, p, arrayIndex(s, h + 12), 7, 1804603682)
-		p = ff(p, l, d, u, arrayIndex(s, h + 13), 12, -40341101)
-		u = ff(u, p, l, d, arrayIndex(s, h + 14), 17, -1502002290)
-		d = ff(d, u, p, l, arrayIndex(s, h + 15), 22, 1236535329)
-		l = gg(l, d, u, p, arrayIndex(s, h + 1), 5, -165796510)
-		p = gg(p, l, d, u, arrayIndex(s, h + 6), 9, -1069501632)
-		u = gg(u, p, l, d, arrayIndex(s, h + 11), 14, 643717713)
-		d = gg(d, u, p, l, arrayIndex(s, h + 0), 20, -373897302)
-		l = gg(l, d, u, p, arrayIndex(s, h + 5), 5, -701558691)
-		p = gg(p, l, d, u, arrayIndex(s, h + 10), 9, 38016083)
-		u = gg(u, p, l, d, arrayIndex(s, h + 15), 14, -660478335)
-		d = gg(d, u, p, l, arrayIndex(s, h + 4), 20, -405537848)
-		l = gg(l, d, u, p, arrayIndex(s, h + 9), 5, 568446438)
-		p = gg(p, l, d, u, arrayIndex(s, h + 14), 9, -1019803690)
-		u = gg(u, p, l, d, arrayIndex(s, h + 3), 14, -187363961)
-		d = gg(d, u, p, l, arrayIndex(s, h + 8), 20, 1163531501)
-		l = gg(l, d, u, p, arrayIndex(s, h + 13), 5, -1444681467)
-		p = gg(p, l, d, u, arrayIndex(s, h + 2), 9, -51403784)
-		u = gg(u, p, l, d, arrayIndex(s, h + 7), 14, 1735328473)
-		d = gg(d, u, p, l, arrayIndex(s, h + 12), 20, -1926607734)
-		l = hh(l, d, u, p, arrayIndex(s, h + 5), 4, -378558)
-		p = hh(p, l, d, u, arrayIndex(s, h + 8), 11, -2022574463)
-		u = hh(u, p, l, d, arrayIndex(s, h + 11), 16, 1839030562)
-		d = hh(d, u, p, l, arrayIndex(s, h + 14), 23, -35309556)
-		l = hh(l, d, u, p, arrayIndex(s, h + 1), 4, -1530992060)
-		p = hh(p, l, d, u, arrayIndex(s, h + 4), 11, 1272893353)
-		u = hh(u, p, l, d, arrayIndex(s, h + 7), 16, -155497632)
-		d = hh(d, u, p, l, arrayIndex(s, h + 10), 23, -1094730640)
-		l = hh(l, d, u, p, arrayIndex(s, h + 13), 4, 681279174)
-		p = hh(p, l, d, u, arrayIndex(s, h + 0), 11, -358537222)
-		u = hh(u, p, l, d, arrayIndex(s, h + 3), 16, -722521979)
-		d = hh(d, u, p, l, arrayIndex(s, h + 6), 23, 76029189)
-		l = hh(l, d, u, p, arrayIndex(s, h + 9), 4, -640364487)
-		p = hh(p, l, d, u, arrayIndex(s, h + 12), 11, -421815835)
-		u = hh(u, p, l, d, arrayIndex(s, h + 15), 16, 530742520)
-		d = hh(d, u, p, l, arrayIndex(s, h + 2), 23, -995338651)
-		l = ii(l, d, u, p, arrayIndex(s, h + 0), 6, -198630844)
-		p = ii(p, l, d, u, arrayIndex(s, h + 7), 10, 1126891415)
-		u = ii(u, p, l, d, arrayIndex(s, h + 14), 15, -1416354905)
-		d = ii(d, u, p, l, arrayIndex(s, h + 5), 21, -57434055)
-		l = ii(l, d, u, p, arrayIndex(s, h + 12), 6, 1700485571)
-		p = ii(p, l, d, u, arrayIndex(s, h + 3), 10, -1894986606)
-		u = ii(u, p, l, d, arrayIndex(s, h + 10), 15, -1051523)
-		d = ii(d, u, p, l, arrayIndex(s, h + 1), 21, -2054922799)
-		l = ii(l, d, u, p, arrayIndex(s, h + 8), 6, 1873313359)
-		p = ii(p, l, d, u, arrayIndex(s, h + 15), 10, -30611744)
-		u = ii(u, p, l, d, arrayIndex(s, h + 6), 15, -1560198380)
-		d = ii(d, u, p, l, arrayIndex(s, h + 13), 21, 1309151649)
-		l = ii(l, d, u, p, arrayIndex(s, h + 4), 6, -145523070)
-		p = ii(p, l, d, u, arrayIndex(s, h + 11), 10, -1120210379)
-		u = ii(u, p, l, d, arrayIndex(s, h + 2), 15, 718787259)
-		d = ii(d, u, p, l, arrayIndex(s, h + 9), 21, -343485551)
-		l = jsPositiveRight(l + A, 0)
-		d = jsPositiveRight(d + b, 0)
-		u = jsPositiveRight(u + y, 0)
-		p = jsPositiveRight(p + x,0)
-
+		l = sg.ss(l, d, u, p, arrayIndex(s, h + 0), i, 3614090360)
+		p = sg.ss(p, l, d, u, arrayIndex(s, h + 1), j, 3905402710)
+		u = sg.ss(u, p, l, d, arrayIndex(s, h + 2), k, 606105819)
+		d = sg.ss(d, u, p, l, arrayIndex(s, h + 3), m, 3250441966)
+		l = sg.ss(l, d, u, p, arrayIndex(s, h + 4), i, 4118548399)
+		p = sg.ss(p, l, d, u, arrayIndex(s, h + 5), j, 1200080426)
+		u = sg.ss(u, p, l, d, arrayIndex(s, h + 6), k, 2821735955)
+		d = sg.ss(d, u, p, l, arrayIndex(s, h + 7), m, 4249261313)
+		l = sg.ss(l, d, u, p, arrayIndex(s, h + 8), i, 1770035416)
+		p = sg.ss(p, l, d, u, arrayIndex(s, h + 9), j, 2336552879)
+		u = sg.ss(u, p, l, d, arrayIndex(s, h + 10), k, 4294925233)
+		d = sg.ss(d, u, p, l, arrayIndex(s, h + 11), m, 2304563134)
+		l = sg.ss(l, d, u, p, arrayIndex(s, h + 12), i, 1804603682)
+		p = sg.ss(p, l, d, u, arrayIndex(s, h + 13), j, 4254626195)
+		u = sg.ss(u, p, l, d, arrayIndex(s, h + 14), k, 2792965006)
+		d = sg.ss(d, u, p, l, arrayIndex(s, h + 15), m, 1236535329)
+		l = sg.dd(l, d, u, p, arrayIndex(s, h + 1), E, 4129170786)
+		p = sg.dd(p, l, d, u, arrayIndex(s, h + 6), f, 3225465664)
+		u = sg.dd(u, p, l, d, arrayIndex(s, h + 11), g, 643717713)
+		d = sg.dd(d, u, p, l, arrayIndex(s, h + 0), o, 3921069994)
+		l = sg.dd(l, d, u, p, arrayIndex(s, h + 5), E, 3593408605)
+		p = sg.dd(p, l, d, u, arrayIndex(s, h + 10), f, 38016083)
+		u = sg.dd(u, p, l, d, arrayIndex(s, h + 15), g, 3634488961)
+		d = sg.dd(d, u, p, l, arrayIndex(s, h + 4), o, 3889429448)
+		l = sg.dd(l, d, u, p, arrayIndex(s, h + 9), E, 568446438)
+		p = sg.dd(p, l, d, u, arrayIndex(s, h + 14), f, 3275163606)
+		u = sg.dd(u, p, l, d, arrayIndex(s, h + 3), g, 4107603335)
+		d = sg.dd(d, u, p, l, arrayIndex(s, h + 8), o, 1163531501)
+		l = sg.dd(l, d, u, p, arrayIndex(s, h + 13), E, 2850285829)
+		p = sg.dd(p, l, d, u, arrayIndex(s, h + 2), f, 4243563512)
+		u = sg.dd(u, p, l, d, arrayIndex(s, h + 7), g, 1735328473)
+		d = sg.dd(d, u, p, l, arrayIndex(s, h + 12), o, 2368359562)
+		l = sg.uu(l, d, u, p, arrayIndex(s, h + 5), I, 4294588738)
+		p = sg.uu(p, l, d, u, arrayIndex(s, h + 8), J, 2272392833)
+		u = sg.uu(u, p, l, d, arrayIndex(s, h + 11), K, 1839030562)
+		d = sg.uu(d, u, p, l, arrayIndex(s, h + 14), L, 4259657740)
+		l = sg.uu(l, d, u, p, arrayIndex(s, h + 1), I, 2763975236)
+		p = sg.uu(p, l, d, u, arrayIndex(s, h + 4), J, 1272893353)
+		u = sg.uu(u, p, l, d, arrayIndex(s, h + 7), K, 4139469664)
+		d = sg.uu(d, u, p, l, arrayIndex(s, h + 10), L, 3200236656)
+		l = sg.uu(l, d, u, p, arrayIndex(s, h + 13), I, 681279174)
+		p = sg.uu(p, l, d, u, arrayIndex(s, h + 0), J, 3936430074)
+		u = sg.uu(u, p, l, d, arrayIndex(s, h + 3), K, 3572445317)
+		d = sg.uu(d, u, p, l, arrayIndex(s, h + 6), L, 76029189)
+		l = sg.uu(l, d, u, p, arrayIndex(s, h + 9), I, 3654602809)
+		p = sg.uu(p, l, d, u, arrayIndex(s, h + 12), J, 3873151461)
+		u = sg.uu(u, p, l, d, arrayIndex(s, h + 15), K, 530742520)
+		d = sg.uu(d, u, p, l, arrayIndex(s, h + 2), L, 3299628645)
+		l = sg.ii(l, d, u, p, arrayIndex(s, h + 0), O, 4096336452)
+		p = sg.ii(p, l, d, u, arrayIndex(s, h + 7), P, 1126891415)
+		u = sg.ii(u, p, l, d, arrayIndex(s, h + 14), Q, 2878612391)
+		d = sg.ii(d, u, p, l, arrayIndex(s, h + 5), R, 4237533241)
+		l = sg.ii(l, d, u, p, arrayIndex(s, h + 12), O, 1700485571)
+		p = sg.ii(p, l, d, u, arrayIndex(s, h + 3), P, 2399980690)
+		u = sg.ii(u, p, l, d, arrayIndex(s, h + 10), Q, 4293915773)
+		d = sg.ii(d, u, p, l, arrayIndex(s, h + 1), R, 2240044497)
+		l = sg.ii(l, d, u, p, arrayIndex(s, h + 8), O, 1873313359)
+		p = sg.ii(p, l, d, u, arrayIndex(s, h + 15), P, 4264355552)
+		u = sg.ii(u, p, l, d, arrayIndex(s, h + 6), Q, 2734768916)
+		d = sg.ii(d, u, p, l, arrayIndex(s, h + 13), R, 1309151649)
+		l = sg.ii(l, d, u, p, arrayIndex(s, h + 4), O, 4149444226)
+		p = sg.ii(p, l, d, u, arrayIndex(s, h + 11), P, 3174756917)
+		u = sg.ii(u, p, l, d, arrayIndex(s, h + 2), Q, 718787259)
+		d = sg.ii(d, u, p, l, arrayIndex(s, h + 9), R, 3951481745)
+		l = sg.oo(l, A)
+		d = sg.oo(d, b)
+		u = sg.oo(u, y)
+		p = sg.oo(p, x)
 	}
-
-	if ed, ok := Endian([]int{l, d, u, p}).([]int); ok {
-		r := WordsToBytes(ed)
-		return BytesToHex(r)
-	} else {
-		panic("nibi")
-	}
-	panic("err return")
+	return strings.ToLower(sg.ggg(l)+sg.ggg(d)+sg.ggg(u)+sg.ggg(p))
 }
 
 

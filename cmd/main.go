@@ -1,27 +1,69 @@
 package main
 
 import (
-	"fmt"
 	"duapp/sign"
+	"encoding/json"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"log"
+	"net/http"
+	"net/url"
 )
 
 func main()  {
-	url := "https://app.poizon.com/api/v1/h5/index/fire/flow/product/detail?productId=36191&productSourceName=undefined&sign="
+	engine := gin.Default()
+	engine.GET("/getsign",GetSign)
+	engine.GET("/get_detail_sign",GetDetailSign)
+	engine.Run(":9999")
+}
+
+
+func GetSign(c *gin.Context) {
+	var tmp = struct{
+		Url  string  `form:"url" binding:"required"`
+	}{}
+	if err := c.ShouldBindQuery(&tmp); err != nil {
+		log.Fatal(err)
+	}
+
+	uu, err := url.Parse(tmp.Url)
+	if err != nil {
+		panic(err)
+	}
+
+	uq := uu.Query()
+	fmt.Println(uq)
 	params := make(map[string]string)
-	params["productId"] = "36191"
-	params["productSourceName"] = "undefined"
-	si := sign.GetSignString(params)
-	fmt.Println(si)
-	sig := sign.GetSign(si)
-	url += sig
-	fmt.Println(url)
-	//url := "https://m.poizon.com/mapi/product/recommendDetail?recommendId=73&lastId=&sign="
-	//params := make(map[string]string)
-	//params["recommendId"] = "73"
-	//params["lastId"] = ""
-	//si := sign.GetSignString(params)
-	//sig := sign.GetSign(si)
-	//url += sig
-	//fmt.Println(url)
+	for k, v := range uu.Query() {
+		params[k] = v[0]
+	}
+	si := sign.SignTool.GetSignString(params)
+	sig := sign.SignTool.GetSign(si)
+	uq.Add("sign", sig)
+	uu.RawQuery = uq.Encode()
+
+	c.String(http.StatusOK, uu.String())
+}
+
+
+
+func GetDetailSign(c *gin.Context) {
+	var pa struct {
+		Params  string  `form:"params" binding:"required"`
+	}
+	if err := c.ShouldBindQuery(&pa); err != nil {
+		log.Fatal(err)
+	}
+
+	params := make(map[string]string)
+	qp, _ := url.QueryUnescape(pa.Params)
+	if err := json.Unmarshal([]byte(qp), &params); err != nil {
+		panic(err)
+	}
+
+	si := sign.SignTool.GetSignString(params)
+	sig := sign.SignTool.GetSign(si)
+
+	c.String(http.StatusOK, sig)
 }
 
