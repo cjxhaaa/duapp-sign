@@ -15,7 +15,7 @@ go build main.go
 
 如想得到https://m.poizon.com/router/product/ProductDetail?spuId=10242商品数据
 
-打开浏览器请求http://120.55.84.175:9999/get_detail_sign?params={"spuId":"10242","productSourceName":"","propertyValueId":""}
+打开浏览器请求http://localhost:9999/get_detail_sign?params={"spuId":"10242","productSourceName":"","propertyValueId":""}
 直接返回sign参数文本信息9ca955484240e758f7f5b876ec72fd74
 
 post：https://app.poizon.com/api/v1/h5/index/fire/flow/product/detail
