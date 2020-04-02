@@ -3,7 +3,6 @@ package sign
 import (
 	"fmt"
 	"github.com/robertkrimen/otto"
-	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,7 +137,7 @@ func jsBInt32(n int) int {
 	}
 	i, err := strconv.ParseUint(binStr, 2, 32)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	return int(i)
 }

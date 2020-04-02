@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"log"
 	"net/http"
 	"net/url"
 )
@@ -23,7 +22,7 @@ func GetSign(c *gin.Context) {
 		Url  string  `form:"url" binding:"required"`
 	}{}
 	if err := c.ShouldBindQuery(&tmp); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	uu, err := url.Parse(tmp.Url)
@@ -52,7 +51,7 @@ func GetDetailSign(c *gin.Context) {
 		Params  string  `form:"params" binding:"required"`
 	}
 	if err := c.ShouldBindQuery(&pa); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	params := make(map[string]string)
